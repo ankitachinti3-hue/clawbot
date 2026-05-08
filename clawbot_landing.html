@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>CLAWBOT — Civic Intelligence Platform</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+
+    * { margin: 0; padding: 0; box-sizing: border-box }
+
+    :root {
+      --border-dim: rgba(255, 255, 255, 0.12);
+      --accent-green: #00ff88;
+      --glow-green: 0 0 20px rgba(0, 255, 136, 0.32);
+    }
+
+    body {
+      font-family: Inter, system-ui, sans-serif;
+      background: #0a0a0a;
+      color: #efefef
+    }
+
+    .hidden { display: none !important }
+
+    .shell-bg {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle at 50% 20%, rgba(0, 207, 255, .08), transparent 38%),
+                  radial-gradient(circle at 20% 70%, rgba(255, 255, 255, .03), transparent 45%), #0a0a0a;
+      pointer-events: none
+    }
+
+    #landing { position: relative; z-index: 10 }
+
+    .nav {
+      position: sticky;
+      top: 0;
+      background: #0d0e10;
+      padding: 20px 40px;
+      border-bottom: 1px solid #1e2124;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav .brand { font-size: 42px; font-weight: 400; line-height: .9 }
+
+    .nav-actions { display: flex; align-items: center; gap: 16px; }
+
+    .launch-btn {
+      padding: 10px 22px;
+      background: var(--accent-green);
+      color: #0a0a0a;
+      border: none;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border-radius: 2px;
+      letter-spacing: 0.05em;
+      transition: background 0.2s;
+    }
+
+    .launch-btn:hover { background: #00ddaa; }
+
+    .hero {
+      padding: 46px 40px 80px;
+      min-height: 70vh;
+      background: #0d0e10
+    }
+
+    .hero h1 {
+      font-size: 74px;
+      line-height: .96;
+      font-weight: 400;
+      letter-spacing: -2px;
+      max-width: 1000px;
+      margin-bottom: 18px
+    }
+
+    .hero p {
+      font-size: 19px;
+      line-height: 1.4;
+      max-width: 980px;
+      color: #d3d3d3;
+      margin-bottom: 28px
+    }
+
+    .hero-buttons { display: flex; gap: 14px }
+
+    .btn {
+      border: 1px solid var(--border-dim);
+      padding: 10px 16px;
+      border-radius: 2px;
+      background: #000;
+      color: #fff;
+      text-decoration: none;
+      font-size: 13px;
+      cursor: pointer
+    }
+
+    .btn:hover { border-color: rgba(255, 255, 255, .65); background: #1a1a1a }
+
+    .btn-green {
+      border: 1px solid var(--accent-green);
+      padding: 10px 20px;
+      border-radius: 2px;
+      background: var(--accent-green);
+      color: #0a0a0a;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: 0.04em;
+      transition: background 0.2s;
+    }
+
+    .btn-green:hover { background: #00ddaa; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      padding: 42px 40px;
+      background: #0a0a0a;
+      border-top: 1px solid #1e2124
+    }
+
+    .stat { text-align: center }
+    .stat .n { font-size: 44px; font-weight: 600 }
+    .stat .l { color: #767676 }
+
+    .marquee {
+      background: #1e2124;
+      overflow: hidden;
+      white-space: nowrap;
+      padding: 16px 0
+    }
+
+    .marquee-track {
+      display: inline-flex;
+      gap: 42px;
+      animation: mar 28s linear infinite
+    }
+
+    @keyframes mar {
+      from { transform: translateX(0) }
+      to { transform: translateX(-50%) }
+    }
+
+    .section { padding: 72px 0; background: #0a0a0a }
+
+    .heading {
+      font-size: 46px;
+      letter-spacing: -.9px;
+      padding: 0 40px;
+      margin-bottom: 48px
+    }
+
+    .platform-card {
+      display: flex;
+      height: 260px;
+      padding: 12px 0 90px;
+      border-top: .8px solid #f7f7f7;
+      transition: .25s;
+      cursor: default;
+    }
+
+    .platform-card:last-child { border-bottom: .8px solid #f7f7f7; }
+
+    .platform-card:hover { background: #f7f7f7; color: #1e2124 }
+
+    .platform-card:hover .platform-desc { color: #444 }
+
+    .platform-card:hover .ghost { opacity: 1; color: #1e2124; }
+
+    .platform-left {
+      width: 50%;
+      display: flex;
+      gap: 38px;
+      padding: 0 40px
+    }
+
+    .platform-number {
+      width: 34%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between
+    }
+
+    .platform-title { font-size: 20px; line-height: 1.15 }
+
+    .platform-desc { font-size: 16px; line-height: 1.4; color: #767676 }
+
+    .platform-right {
+      width: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 40px
+    }
+
+    .ghost {
+      font-size: 128px;
+      letter-spacing: -4px;
+      opacity: .1;
+      transition: opacity 0.25s, color 0.25s;
+    }
+
+    .arch-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      padding: 0 40px
+    }
+
+    .arch-card {
+      background: #f3f3f3;
+      color: #1e2124;
+      padding: 18px;
+      height: 220px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: background 0.2s, transform 0.2s;
+      cursor: default;
+    }
+
+    .arch-card:hover { background: #e0e0e0; transform: translateY(-2px); }
+
+    .arch-title { font-size: 18px; font-weight: 600 }
+    .arch-tech { font-size: 16px }
+
+    .arch-pills { display: flex; gap: 8px; flex-wrap: wrap }
+
+    .pill {
+      background: #1e2124;
+      color: #fff;
+      padding: 4px 8px;
+      border-radius: 2px;
+      font-size: 12px
+    }
+
+    .pipeline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 40px
+    }
+
+    .p-step { text-align: center; flex: 1 }
+    .p-num { font-size: 13px; color: #767676 }
+    .p-title { font-size: 16px }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      padding: 0 40px;
+    }
+
+    .feat-card {
+      border: 1px solid #1e2124;
+      padding: 28px 24px;
+      background: #0d0e10;
+      transition: background 0.25s, color 0.25s;
+      cursor: default;
+      min-height: 280px;
+    }
+
+    .feat-card:hover { background: #f7f7f7; color: #1e2124; }
+    .feat-card:hover .feat-num { color: #999; }
+    .feat-card:hover .feat-desc { color: #444; }
+    .feat-card:hover .feat-pill { background: #1e2124; color: #fff; }
+
+    .feat-num { font-size: 12px; color: #767676; margin-bottom: 14px; letter-spacing: 0.1em; }
+    .feat-title { font-size: 17px; font-weight: 600; margin-bottom: 10px; line-height: 1.3; }
+    .feat-desc { font-size: 14px; color: #767676; line-height: 1.5; margin-bottom: 18px; }
+    .feat-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+
+    .feat-pill {
+      background: #1e2124;
+      color: #efefef;
+      padding: 3px 8px;
+      border-radius: 2px;
+      font-size: 11px;
+      transition: background 0.25s, color 0.25s;
+    }
+
+    .biz-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+      padding: 0 40px;
+    }
+
+    .biz-card {
+      border: 1px solid #1e2124;
+      padding: 32px 28px;
+      background: #0d0e10;
+      transition: background 0.25s, color 0.25s;
+      cursor: default;
+    }
+
+    .biz-card:hover { background: #f7f7f7; color: #1e2124; }
+    .biz-card:hover .biz-desc { color: #444; }
+    .biz-card:hover .biz-price { color: #00aa55; }
+
+    .biz-title { font-size: 20px; font-weight: 600; margin-bottom: 10px; }
+    .biz-desc { font-size: 14px; color: #767676; line-height: 1.5; margin-bottom: 16px; }
+    .biz-price { font-size: 14px; color: var(--accent-green); font-family: 'Courier New', monospace; }
+
+    .market-callout {
+      margin: 0 40px;
+      margin-top: 32px;
+      border: 1px solid #1e2124;
+      padding: 36px 32px;
+      background: #0d0e10;
+    }
+
+    .market-tag {
+      font-size: 11px;
+      color: var(--accent-green);
+      letter-spacing: 0.2em;
+      margin-bottom: 14px;
+      font-family: 'Courier New', monospace;
+    }
+
+    .market-title { font-size: 30px; font-weight: 600; margin-bottom: 10px; }
+    .market-desc { font-size: 15px; color: #767676; line-height: 1.6; }
+
+    footer {
+      border-top: 1px solid #1e2124;
+      padding: 32px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .foot-brand { font-size: 24px; font-weight: 400; }
+    .foot-copy { font-size: 12px; color: #767676; letter-spacing: 0.05em; }
+
+    .chat-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(8px);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    .chat-modal {
+      width: 100vw;
+      height: 100vh;
+      border-radius: 0;
+      background: #1a1a1a;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    .chat-header {
+      height: 56px;
+      background: #1a1a1a;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .chat-header-left {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .chat-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #cc7a00;
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+
+    .chat-title {
+      font-size: 15px;
+      font-weight: 500;
+      color: #ececec;
+    }
+
+    .chat-badge {
+      font-size: 11px;
+      background: rgba(255, 255, 255, 0.08);
+      color: #999;
+      padding: 2px 8px;
+      border-radius: 20px;
+    }
+
+    .chat-close {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(255, 255, 255, 0.06);
+      color: #888;
+      font-size: 16px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .chat-close:hover {
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+    }
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 0;
+      background: #1a1a1a;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+    }
+
+    .chat-messages::-webkit-scrollbar { width: 4px; }
+    .chat-messages::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); }
+
+    .chat-suggestions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin: 16px 20px;
+    }
+
+    .chat-suggestion {
+      background: #232323;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 12px 16px;
+      cursor: pointer;
+      font-size: 13px;
+      color: #ccc;
+      text-align: left;
+    }
+
+    .chat-suggestion:hover {
+      background: #2a2a2a;
+    }
+
+    .chat-msg.user {
+      max-width: 70%;
+      background: #2f2f2f;
+      border-radius: 18px 18px 4px 18px;
+      padding: 10px 16px;
+      color: #ececec;
+      font-size: 14px;
+      line-height: 1.5;
+      margin: 4px 20px 4px auto;
+      white-space: pre-wrap;
+    }
+
+    .chat-msg.bot {
+      width: 100%;
+      padding: 10px 20px;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .chat-msg-bot-text {
+      color: #ececec;
+      font-size: 14px;
+      line-height: 1.7;
+      white-space: pre-wrap;
+      flex: 1;
+    }
+
+    .chat-msg-bot-text.error {
+      background: rgba(255, 80, 80, 0.1);
+      border: 1px solid rgba(255, 80, 80, 0.2);
+      color: #ff8080;
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+
+    .typing-dots {
+      display: inline-flex;
+      gap: 5px;
+      align-items: center;
+      padding-top: 3px;
+    }
+
+    .typing-dots span {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #666;
+      animation: dotBounce 0.6s infinite;
+    }
+
+    .typing-dots span:nth-child(2) { animation-delay: 0.12s; }
+    .typing-dots span:nth-child(3) { animation-delay: 0.24s; }
+
+    @keyframes dotBounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-4px); }
+    }
+
+    .chat-input-row-wrap {
+      background: #1a1a1a;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 12px 16px;
+    }
+
+    .chat-body {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+    }
+
+    .chat-sidebar {
+      width: 250px;
+      border-right: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 14px 10px;
+      overflow-y: auto;
+      background: #171717;
+    }
+
+    .chat-sidebar-title {
+      font-size: 11px;
+      color: #9a9a9a;
+      letter-spacing: 0.08em;
+      margin: 0 8px 10px;
+      text-transform: uppercase;
+    }
+
+    .chat-feature {
+      width: 100%;
+      text-align: left;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: #232323;
+      color: #cfcfcf;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .chat-feature:hover {
+      background: #2a2a2a;
+    }
+
+    .chat-feature.active {
+      border-color: rgba(204, 122, 0, 0.55);
+      box-shadow: inset 0 0 0 1px rgba(204, 122, 0, 0.2);
+      color: #ececec;
+    }
+
+    .chat-main {
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .chat-input-row {
+      position: relative;
+    }
+
+    .chat-input {
+      width: 100%;
+      background: #2f2f2f;
+      border-radius: 24px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 10px 52px 10px 18px;
+      color: #ececec;
+      font-size: 14px;
+      outline: none;
+      resize: none;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 42px;
+      max-height: 160px;
+    }
+
+    .chat-input:focus {
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+
+    .chat-input::placeholder {
+      color: #666;
+    }
+
+    .chat-send {
+      position: absolute;
+      right: 6px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: none;
+      background: #cc7a00;
+      color: #fff;
+      font-size: 14px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .chat-send:hover {
+      background: #e08800;
+    }
+
+    .chat-send:disabled {
+      background: #333;
+      color: #666;
+      cursor: not-allowed;
+    }
+
+    @media (max-width:1000px) {
+      .arch-grid { grid-template-columns: 1fr }
+      .features-grid { grid-template-columns: 1fr }
+      .biz-grid { grid-template-columns: 1fr }
+      .hero h1 { font-size: 44px }
+      .stats { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="shell-bg"></div>
+
+  <div id="landing">
+    <nav class="nav">
+      <div class="brand">CLAWBOT</div>
+      <div class="nav-actions">
+        <a class="btn" href="#architecture">Architecture</a>
+        <a class="btn" href="#features">Features</a>
+        <button class="launch-btn" onclick="openChatModal()">Launch Agent →</button>
+      </div>
+    </nav>
+
+    <section class="hero">
+      <h1>The civic AI that doesn't just answer — it fights back for citizens.</h1>
+      <p>CLAWBOT is the first civic intelligence agent built specifically for Belagavi City Corporation — multilingual, ward-aware, and designed to protect citizens from bureaucratic failure, corruption, and civic neglect.</p>
+      <div class="hero-buttons">
+        <button class="btn-green" onclick="openChatModal()">Launch Agent →</button>
+        <a class="btn" href="#architecture">View Architecture</a>
+      </div>
+    </section>
+
+    <section class="stats">
+      <div class="stat">
+        <div class="n">58</div>
+        <div class="l">Wards covered in Belagavi</div>
+      </div>
+      <div class="stat">
+        <div class="n">12+</div>
+        <div class="l">Intelligence modules active</div>
+      </div>
+      <div class="stat">
+        <div class="n">70B</div>
+        <div class="l">Reasoning model (Cerebras)</div>
+      </div>
+      <div class="stat">
+        <div class="n">&lt;3s</div>
+        <div class="l">Response time per query</div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 class="heading">Intelligence Layer</h2>
+      <div class="platform-card"><div class="platform-left"><div class="platform-number"><div class="platform-title">Live Web Scraping Engine</div><div>/0.1</div></div><div class="platform-desc">Scrapes live government sources per query — BCC portal, Karnataka e-governance, Sakala portal — with relevance scoring and direct citations in real time.</div></div><div class="platform-right"><div class="ghost">WEB</div><div>/0.1</div></div></div>
+      <div class="platform-card"><div class="platform-left"><div class="platform-number"><div class="platform-title">Cerebras Llama 3.3 70B</div><div>/0.2</div></div><div class="platform-desc">Wafer-scale silicon inference delivering structured civic answers under 3 seconds — no timeout, no hallucinated fees or fake timelines.</div></div><div class="platform-right"><div class="ghost">70B</div><div>/0.2</div></div></div>
+      <div class="platform-card"><div class="platform-left"><div class="platform-number"><div class="platform-title">Multilingual Code-Switch Handler</div><div>/0.3</div></div><div class="platform-desc">Handles Kannada + English + Hindi mixed in one sentence — exactly the way citizens in Belagavi actually speak and type.</div></div><div class="platform-right"><div class="ghost">3L</div><div>/0.3</div></div></div>
+      <div class="platform-card"><div class="platform-left"><div class="platform-number"><div class="platform-title">Confidence Scorer + Escalation</div><div>/0.4</div></div><div class="platform-desc">Below 45% confidence, CLAWBOT stops guessing and routes directly to the accountable officer with name, contact, and Sakala Act timeline.</div></div><div class="platform-right"><div class="ghost">45%</div><div>/0.4</div></div></div>
+    </section>
+
+    <section id="features" class="section" style="background:#0d0e10">
+      <h2 class="heading">What CLAWBOT Does That Nothing Else Does</h2>
+      <div class="features-grid">
+        <div class="feat-card"><div class="feat-num">01</div><div class="feat-title">Corruption Signal Detector</div><div class="feat-desc">Silently analyzes every message for direct and indirect bribery signals. Logs ward, department, severity. Citizen sees nothing — the chat continues normally.</div><div class="feat-pills"><span class="feat-pill">SILENT</span><span class="feat-pill">AI ANALYSIS</span><span class="feat-pill">WARD-LEVEL</span></div></div>
+        <div class="feat-card"><div class="feat-num">02</div><div class="feat-title">Officer Accountability Mapper</div><div class="feat-desc">Knows every officer responsible under Karnataka Sakala Act — name, designation, legal timeline, penalty per day of delay, and full escalation path.</div><div class="feat-pills"><span class="feat-pill">SAKALA ACT</span><span class="feat-pill">LEGAL</span><span class="feat-pill">COMPENSATION</span></div></div>
+        <div class="feat-card"><div class="feat-num">03</div><div class="feat-title">Collective Grievance Aggregator</div><div class="feat-desc">When 10+ citizens report the same issue in one ward, it becomes a Collective Grievance. Auto-generates a group petition with all evidence included.</div><div class="feat-pills"><span class="feat-pill">AGGREGATION</span><span class="feat-pill">PETITION GEN</span><span class="feat-pill">WARD</span></div></div>
+        <div class="feat-card"><div class="feat-num">04</div><div class="feat-title">Constitutional Rights Mapper</div><div class="feat-desc">When municipal failure crosses legal thresholds, CLAWBOT maps it to the violated Fundamental Right and explains how to file a PIL at Karnataka High Court.</div><div class="feat-pills"><span class="feat-pill">PIL</span><span class="feat-pill">FUNDAMENTAL RIGHTS</span><span class="feat-pill">LOKAYUKTA</span></div></div>
+        <div class="feat-card"><div class="feat-num">05</div><div class="feat-title">The Civic Twin</div><div class="feat-desc">Every ward gets a real-time health score (0–100) from complaints, corruption signals, and silence score. 58 wards on a live grid — green, yellow, or red.</div><div class="feat-pills"><span class="feat-pill">DIGITAL TWIN</span><span class="feat-pill">LIVE GRID</span><span class="feat-pill">58 WARDS</span></div></div>
+        <div class="feat-card"><div class="feat-num">06</div><div class="feat-title">Silence Pattern Detector</div><div class="feat-desc">When complaint volume in a ward drops to zero after being consistently high — that's not resolution, that's despair. CLAWBOT flags these as Zones of Civic Despair.</div><div class="feat-pills"><span class="feat-pill">ANOMALY</span><span class="feat-pill">PATTERN</span><span class="feat-pill">DESPAIR INDEX</span></div></div>
+        <div class="feat-card"><div class="feat-num">07</div><div class="feat-title">Poverty Trap Detector</div><div class="feat-desc">When a citizen asks about 2+ poverty schemes in one session, CLAWBOT generates a Full Entitlement Report — every scheme they qualify for, with total monthly benefit calculated.</div><div class="feat-pills"><span class="feat-pill">PMAY</span><span class="feat-pill">BPL</span><span class="feat-pill">ENTITLEMENT</span></div></div>
+        <div class="feat-card"><div class="feat-num">08</div><div class="feat-title">The Reckoning Report</div><div class="feat-desc">Weekly AI-written accountability newspaper in The Hindu editorial style. Most failed department, worst ward, corruption trend. Auto-sent to Municipal Commissioner.</div><div class="feat-pills"><span class="feat-pill">WEEKLY</span><span class="feat-pill">AI JOURNALISM</span><span class="feat-pill">ACCOUNTABILITY</span></div></div>
+        <div class="feat-card"><div class="feat-num">09</div><div class="feat-title">Hyperlocal Infrastructure Memory</div><div class="feat-desc">Before logging a complaint, checks if the same issue already exists. If yes: "We have 14 complaints about this. Assigned engineer: X. Expected fix: Y." Zero duplicates.</div><div class="feat-pills"><span class="feat-pill">DEDUP</span><span class="feat-pill">MEMORY</span><span class="feat-pill">ENGINEER TRACK</span></div></div>
+      </div>
+    </section>
+
+    <section id="architecture" class="section">
+      <h2 class="heading">Architecture</h2>
+      <div class="arch-grid">
+        <div class="arch-card"><div><div class="arch-title">01 — Knowledge Layer</div><div class="arch-tech">BCC Knowledge Base</div></div><div class="arch-pills"><span class="pill">15 Departments</span><span class="pill">58 Wards</span><span class="pill">JSON</span></div></div>
+        <div class="arch-card"><div><div class="arch-title">02 — Vector Layer</div><div class="arch-tech">ChromaDB Embeddings</div></div><div class="arch-pills"><span class="pill">ChromaDB</span><span class="pill">MiniLM</span><span class="pill">Cosine Sim</span></div></div>
+        <div class="arch-card"><div><div class="arch-title">03 — Reasoning Layer</div><div class="arch-tech">Cerebras Llama 3.3 70B</div></div><div class="arch-pills"><span class="pill">Cerebras</span><span class="pill">70B</span><span class="pill">Python</span></div></div>
+        <div class="arch-card"><div><div class="arch-title">04 — Orchestration</div><div class="arch-tech">FastAPI Gateway</div></div><div class="arch-pills"><span class="pill">REST</span><span class="pill">Python</span><span class="pill">Backend</span></div></div>
+        <div class="arch-card"><div><div class="arch-title">05 — Data Layer</div><div class="arch-tech">SQLite + APScheduler</div></div><div class="arch-pills"><span class="pill">SQLite</span><span class="pill">Logs</span><span class="pill">Signals</span></div></div>
+        <div class="arch-card"><div><div class="arch-title">06 — Delivery</div><div class="arch-tech">React + Vercel</div></div><div class="arch-pills"><span class="pill">React</span><span class="pill">Tailwind</span><span class="pill">Vercel</span></div></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 class="heading">Core Pipeline</h2>
+      <div class="pipeline"><div class="p-step"><div class="p-num">01</div><div class="p-title">Citizen Query</div></div><div>-></div><div class="p-step"><div class="p-num">02</div><div class="p-title">ChromaDB Retrieval</div></div><div>-></div><div class="p-step"><div class="p-num">03</div><div class="p-title">Confidence Scoring</div></div><div>-></div><div class="p-step"><div class="p-num">04</div><div class="p-title">Cerebras 70B</div></div><div>-></div><div class="p-step"><div class="p-num">05</div><div class="p-title">Signal Detection</div></div><div>-></div><div class="p-step"><div class="p-num">06</div><div class="p-title">Citizen Response</div></div></div>
+    </section>
+
+    <section class="section" style="background:#0d0e10">
+      <h2 class="heading">Business Model</h2>
+      <div class="biz-grid">
+        <div class="biz-card"><div class="biz-title">SaaS Subscription</div><div class="biz-desc">Monthly subscription per city corporation. Fully hosted, zero code changes needed. Municipality just updates the knowledge base.</div><div class="biz-price">₹2L – ₹5L / month per city</div></div>
+        <div class="biz-card"><div class="biz-title">Government Tender</div><div class="biz-desc">State-level rollout via e-procurement under Digital India / National e-Governance Plan. One state contract = ₹5–50 Crore.</div><div class="biz-price">₹5Cr – ₹50Cr per state contract</div></div>
+        <div class="biz-card"><div class="biz-title">White Label License</div><div class="biz-desc">Any ULB deploys CLAWBOT under their own brand — BengaluruBot, PuneBot. One-time setup fee plus monthly maintenance.</div><div class="biz-price">₹5L setup + ₹1L / month</div></div>
+        <div class="biz-card"><div class="biz-title">Usage-Based Pricing</div><div class="biz-desc">Per-query pricing for smaller municipalities. Scales automatically with city size. No upfront commitment needed.</div><div class="biz-price">₹1–2 per resolved query</div></div>
+      </div>
+      <div class="market-callout"><div class="market-tag">MARKET SIZE</div><div class="market-title">4,500+ Urban Local Bodies in India</div><div class="market-desc">Capturing just 1% of Indian municipalities = <strong style="color:#efefef">₹50 Crore ARR</strong>. The GovTech market in India is growing at 25%+ CAGR. CLAWBOT doesn't need to win the world — just 45 cities.</div></div>
+    </section>
+
+    <footer>
+      <div class="foot-brand">CLAWBOT</div>
+      <div class="foot-copy">BUILT AT HACKATHON — BELAGAVI, KARNATAKA, 2025</div>
+    </footer>
+  </div>
+
+  <div class="chat-modal-overlay" id="chatModalOverlay">
+    <div class="chat-modal">
+      <div class="chat-header">
+        <div class="chat-header-left">
+          <span class="chat-avatar">C</span>
+          <span class="chat-title">CLAWBOT</span>
+          <span class="chat-badge">Civic AI</span>
+        </div>
+        <button class="chat-close" onclick="closeChatModal()">×</button>
+      </div>
+      <div class="chat-body">
+        <aside class="chat-sidebar">
+          <div class="chat-sidebar-title">Features</div>
+          <button type="button" class="chat-feature active" onclick="selectFeature(this, 'General Civic Assistant')">General Civic Assistant</button>
+          <button type="button" class="chat-feature" onclick="selectFeature(this, 'Trade Licence Assistant')">Trade Licence Assistant</button>
+          <button type="button" class="chat-feature" onclick="selectFeature(this, 'Property Tax Guidance')">Property Tax Guidance</button>
+          <button type="button" class="chat-feature" onclick="selectFeature(this, 'Corruption Signal Detector')">Corruption Signal Detector</button>
+          <button type="button" class="chat-feature" onclick="selectFeature(this, 'Rights Mapper')">Rights Mapper</button>
+          <button type="button" class="chat-feature" onclick="selectFeature(this, 'Grievance Aggregator')">Grievance Aggregator</button>
+          <button type="button" class="chat-feature" onclick="selectFeature(this, 'Ward Intelligence')">Ward Intelligence</button>
+          <button type="button" class="chat-feature" onclick="selectFeature(this, 'Infrastructure Memory')">Infrastructure Memory</button>
+          <button type="button" class="chat-feature" onclick="selectFeature(this, 'Officer Accountability')">Officer Accountability</button>
+          <button type="button" class="chat-feature" onclick="selectFeature(this, 'Collective Grievance Aggregator')">Collective Grievance Aggregator</button>
+          <button type="button" class="chat-feature" onclick="selectFeature(this, 'Citizen Life Event Engine')">Citizen Life Event Engine</button>
+          <button type="button" class="chat-feature" onclick="selectFeature(this, 'Poverty Trap Detector')">Poverty Trap Detector</button>
+          <button type="button" class="chat-feature" onclick="selectFeature(this, 'Silence Pattern Detector')">Silence Pattern Detector</button>
+          <button type="button" class="chat-feature" onclick="selectFeature(this, 'Community Wisdom Engine')">Community Wisdom Engine</button>
+          <button type="button" class="chat-feature" onclick="selectFeature(this, 'Constitutional Rights Mapper')">Constitutional Rights Mapper</button>
+          <button type="button" class="chat-feature" onclick="selectFeature(this, 'Civic Twin')">Civic Twin</button>
+          <button type="button" class="chat-feature" onclick="selectFeature(this, 'Reckoning Report')">Reckoning Report</button>
+        </aside>
+        <div class="chat-main">
+          <div class="chat-messages" id="chatMessages"></div>
+          <div class="chat-suggestions" id="chatSuggestions">
+            <button type="button" class="chat-suggestion" onclick="useSuggestion('How do I apply for a trade licence?')">How do I apply for a trade licence?</button>
+            <button type="button" class="chat-suggestion" onclick="useSuggestion('What is the property tax deadline?')">What is the property tax deadline?</button>
+            <button type="button" class="chat-suggestion" onclick="useSuggestion('How to file a corruption complaint?')">How to file a corruption complaint?</button>
+            <button type="button" class="chat-suggestion" onclick="useSuggestion('What are my rights if water is cut?')">What are my rights if water is cut?</button>
+          </div>
+          <div class="chat-input-row-wrap">
+            <div class="chat-input-row">
+              <textarea id="chatInput" class="chat-input" placeholder="Message CLAWBOT..." rows="1"></textarea>
+              <button id="chatSendBtn" class="chat-send" onclick="sendChatMessage()" disabled>➤</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const cbSessionId = (crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now());
+    let isTyping = false;
+    let activeFeature = 'General Civic Assistant';
+
+    function openChatModal() {
+      document.getElementById('chatModalOverlay').style.display = 'flex';
+      const box = document.getElementById('chatMessages');
+      if (box && !box.dataset.initialized) {
+        appendMessage("Hi! I'm CLAWBOT, your civic intelligence assistant for Belagavi City Corporation. I can help you with trade licences, property tax, building permits, water connections, certificates, your legal rights, and much more. What can I help you with today?", 'bot');
+        box.dataset.initialized = 'true';
+      }
+      const suggestions = document.getElementById('chatSuggestions');
+      if (suggestions && box && box.childElementCount <= 1) suggestions.style.display = 'grid';
+      const input = document.getElementById('chatInput');
+      if (input) input.focus();
+    }
+
+    function closeChatModal() {
+      document.getElementById('chatModalOverlay').style.display = 'none';
+    }
+
+    function appendMessage(text, who, isError = false) {
+      const box = document.getElementById('chatMessages');
+      const div = document.createElement('div');
+      div.className = `chat-msg ${who === 'user' ? 'user' : 'bot'}`;
+      if (who === 'user') div.textContent = text;
+      else div.innerHTML = `<span class="chat-avatar">C</span><div class="chat-msg-bot-text${isError ? ' error' : ''}">${text}</div>`;
+      box.appendChild(div);
+      box.scrollTop = box.scrollHeight;
+      if (who === 'user') {
+        const suggestions = document.getElementById('chatSuggestions');
+        if (suggestions) suggestions.style.display = 'none';
+      }
+    }
+
+    function setTyping(show) {
+      const box = document.getElementById('chatMessages');
+      const id = 'typingIndicator';
+      const existing = document.getElementById(id);
+      if (show) {
+        if (existing) return;
+        const div = document.createElement('div');
+        div.id = id;
+        div.className = 'chat-msg bot';
+        div.innerHTML = '<span class="chat-avatar">C</span><div class="typing-dots"><span></span><span></span><span></span></div>';
+        box.appendChild(div);
+        box.scrollTop = box.scrollHeight;
+      } else if (existing) {
+        existing.remove();
+      }
+    }
+
+    function useSuggestion(text) {
+      const input = document.getElementById('chatInput');
+      if (!input) return;
+      input.value = text;
+      updateSendState();
+      input.focus();
+    }
+
+    function selectFeature(el, featureName) {
+      document.querySelectorAll('.chat-feature').forEach((btn) => btn.classList.remove('active'));
+      el.classList.add('active');
+      activeFeature = featureName;
+      const input = document.getElementById('chatInput');
+      if (input) {
+        input.value = `Help me with ${featureName.toLowerCase()}. `;
+        input.focus();
+        updateSendState();
+      }
+      appendMessage(`Switched to ${featureName}. Ask your question and I will focus on this feature.`, 'bot');
+    }
+
+    function updateSendState() {
+      const input = document.getElementById('chatInput');
+      const btn = document.getElementById('chatSendBtn');
+      if (!input || !btn) return;
+      btn.disabled = !(input.value || '').trim();
+    }
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeChatModal();
+    });
+
+    async function sendChatMessage() {
+      if (isTyping) return;
+      const input = document.getElementById('chatInput');
+      const msg = (input.value || '').trim();
+      if (!msg) return;
+      appendMessage(msg, 'user');
+      input.value = '';
+      isTyping = true;
+      setTyping(true);
+      try {
+        const res = await fetch('http://localhost:8000/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: `[Feature: ${activeFeature}] ${msg}`, language: 'en', session_id: cbSessionId })
+        });
+        const data = await res.json();
+        setTyping(false);
+        appendMessage((data && data.answer) ? data.answer : 'No response received.', 'bot');
+      } catch (e) {
+        setTyping(false);
+        appendMessage('Unable to connect to CLAWBOT backend.', 'bot', true);
+      } finally {
+        isTyping = false;
+        updateSendState();
+      }
+    }
+
+    document.getElementById('chatInput').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendChatMessage();
+      }
+    });
+
+    document.getElementById('chatInput').addEventListener('input', function () {
+      this.style.height = 'auto';
+      this.style.height = `${Math.min(this.scrollHeight, 160)}px`;
+      updateSendState();
+    });
+
+    document.querySelectorAll('a[href^="#"]').forEach((a) => {
+      a.addEventListener('click', function (e) {
+        const href = this.getAttribute('href');
+        const target = document.querySelector(href);
+        if (target) {
+          e.preventDefault();
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    });
+
+    function animateStat(el) {
+      const raw = el.textContent.trim();
+      const ltMatch = raw.match(/^<\s*(\d+)(.*)$/);
+      const plusMatch = raw.match(/^(\d+)\+$/);
+      const bMatch = raw.match(/^(\d+)B$/);
+      const plainMatch = raw.match(/^(\d+)$/);
+      let end = 0;
+      let suffix = '';
+      let prefix = '';
+      if (ltMatch) { end = Number(ltMatch[1]); suffix = ltMatch[2] || ''; prefix = '<'; }
+      else if (plusMatch) { end = Number(plusMatch[1]); suffix = '+'; }
+      else if (bMatch) { end = Number(bMatch[1]); suffix = 'B'; }
+      else if (plainMatch) { end = Number(plainMatch[1]); }
+      else { return; }
+
+      const duration = 1100;
+      const startTs = performance.now();
+      function step(now) {
+        const p = Math.min(1, (now - startTs) / duration);
+        const v = Math.round(end * p);
+        el.textContent = `${prefix}${v}${suffix}`;
+        if (p < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    const statsSection = document.querySelector('.stats');
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          document.querySelectorAll('.stat .n').forEach(animateStat);
+          obs.disconnect();
+        }
+      });
+    }, { threshold: 0.4 });
+    if (statsSection) obs.observe(statsSection);
+  </script>
+</body>
+
+</html>

@@ -1,42 +1,11 @@
 from __future__ import annotations
 
-import sqlite3
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any
 
+from db_init import connect_db, init_all_tables, utc_now_iso
 
-DB_PATH = Path(__file__).resolve().parent / "civicbot_analytics.db"
-
-
-def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def _init_db() -> None:
-    with _connect() as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS queries (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              session_id TEXT NOT NULL,
-              query_text TEXT NOT NULL,
-              category TEXT NOT NULL,
-              confidence REAL NOT NULL,
-              escalated INTEGER NOT NULL,
-              timestamp TEXT NOT NULL,
-              language TEXT NOT NULL
-            )
-            """
-        )
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_queries_ts ON queries(timestamp)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_queries_cat ON queries(category)")
-        conn.commit()
-
-
-_init_db()
+init_all_tables()
 
 
 def log_query(
@@ -47,8 +16,8 @@ def log_query(
     escalated: bool,
     language: str,
 ) -> None:
-    ts = datetime.now(timezone.utc).isoformat()
-    with _connect() as conn:
+    ts = utc_now_iso()
+    with connect_db() as conn:
         conn.execute(
             """
             INSERT INTO queries (session_id, query_text, category, confidence, escalated, timestamp, language)
@@ -68,7 +37,7 @@ def log_query(
 
 
 def get_analytics() -> dict[str, Any]:
-    with _connect() as conn:
+    with connect_db() as conn:
         total = conn.execute("SELECT COUNT(*) AS c FROM queries").fetchone()["c"]
         unanswered = conn.execute(
             "SELECT COUNT(*) AS c FROM queries WHERE confidence < 0.4"

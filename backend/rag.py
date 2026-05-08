@@ -32,6 +32,9 @@ def _load_kb() -> list[dict[str, Any]]:
     path = _kb_path()
     with path.open("r", encoding="utf-8") as f:
         data = json.load(f)
+    if isinstance(data, dict):
+        # Supports extended format: {"entries":[...], "ward_data":{...}}
+        data = data.get("entries", [])
     if not isinstance(data, list):
         raise ValueError("knowledge_base.json must be a JSON array")
     return data

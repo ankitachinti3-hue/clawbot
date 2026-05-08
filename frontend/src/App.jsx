@@ -2,12 +2,14 @@ import React from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import ChatPage from "./pages/ChatPage.jsx";
 import AdminPage from "./pages/AdminPage.jsx";
+import WisdomPage from "./pages/WisdomPage.jsx";
 
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<ChatPage />} />
       <Route path="/admin" element={<AdminPage />} />
+      <Route path="/wisdom" element={<WisdomPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

@@ -162,6 +162,12 @@ export default function ChatWindow() {
             >
               Admin
             </Link>
+            <Link
+              to="/wisdom"
+              className="rounded-xl border border-white/10 bg-navy-800/60 hover:bg-navy-800/90 px-3 py-2 text-sm text-white"
+            >
+              Wisdom
+            </Link>
           </div>
         </div>
       </div>

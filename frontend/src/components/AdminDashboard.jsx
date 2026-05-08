@@ -1,41 +1,19 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { RefreshCw } from "lucide-react";
-import { getAnalytics } from "../utils/api.js";
-
-const CATEGORY_LABELS = {
-  trade_licence: "Trade licence",
-  property_tax: "Property tax",
-  building_permit: "Building permit",
-  utility: "Utilities",
-  certificate: "Certificates",
-  grievance: "Grievances",
-  unknown: "Unknown",
-};
-
-const PIE_COLORS = ["#10B981", "#60A5FA", "#F59E0B", "#F472B6", "#A78BFA", "#22C55E", "#94A3B8"];
-
-function pct(n) {
-  return `${Math.round((n || 0) * 100)}%`;
-}
-
-function clamp01(x) {
-  const v = Number(x);
-  if (Number.isNaN(v)) return 0;
-  return Math.max(0, Math.min(1, v));
-}
+import {
+  acknowledgeSilencePattern,
+  getAnalytics,
+  getCivicTwin,
+  getCollectiveGrievances,
+  getCorruptionSignals,
+  getInfrastructureMemory,
+  getOfficerAccountability,
+  getReckoningReport,
+  getRightsAlerts,
+  getSilencePatterns,
+  resolveCorruptionSignal,
+} from "../utils/api.js";
 
 function formatTime(ts) {
   try {
@@ -52,15 +30,55 @@ function formatTime(ts) {
 }
 
 export default function AdminDashboard() {
-  const [data, setData] = useState(null);
+  const [analytics, setAnalytics] = useState(null);
+  const [corruption, setCorruption] = useState([]);
+  const [officerData, setOfficerData] = useState([]);
+  const [collectiveData, setCollectiveData] = useState([]);
+  const [infraData, setInfraData] = useState([]);
+  const [silenceData, setSilenceData] = useState([]);
+  const [rightsData, setRightsData] = useState([]);
+  const [civicTwin, setCivicTwin] = useState(null);
+  const [reckoning, setReckoning] = useState(null);
+  const [tab, setTab] = useState("analytics");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+
+  const tabs = [
+    "analytics",
+    "corruption signals",
+    "officer accountability",
+    "collective grievances",
+    "infrastructure memory",
+    "silence patterns",
+    "community wisdom",
+    "rights alerts",
+    "civic twin",
+    "reckoning report",
+  ];
 
   const load = async () => {
     setErr("");
     try {
-      const d = await getAnalytics();
-      setData(d);
+      const [a, c, o, g, i, s, r, twin, rec] = await Promise.all([
+        getAnalytics(),
+        getCorruptionSignals(),
+        getOfficerAccountability(),
+        getCollectiveGrievances(),
+        getInfrastructureMemory(),
+        getSilencePatterns(),
+        getRightsAlerts(),
+        getCivicTwin(),
+        getReckoningReport(),
+      ]);
+      setAnalytics(a);
+      setCorruption(c.items || []);
+      setOfficerData(o.services || []);
+      setCollectiveData(g.items || []);
+      setInfraData(i.items || []);
+      setSilenceData(s.items || []);
+      setRightsData(r.items || []);
+      setCivicTwin(twin);
+      setReckoning(rec);
     } catch (e) {
       setErr(e?.message || "Failed to fetch analytics");
     } finally {
@@ -75,29 +93,19 @@ export default function AdminDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const topCategory = useMemo(() => {
-    const first = data?.top_categories?.[0]?.category;
-    return first || "unknown";
-  }, [data]);
-
-  const queriesToday = useMemo(() => {
-    const buckets = data?.queries_by_hour || [];
-    const today = new Date();
-    const yyyyMmDd = today.toISOString().slice(0, 10);
-    return buckets
-      .filter((b) => (b.timestamp || "").startsWith(yyyyMmDd))
-      .reduce((sum, b) => sum + (b.count || 0), 0);
-  }, [data]);
-
-  const categoryPieData = useMemo(() => {
-    const top = data?.top_categories || [];
-    if (!top.length) return [{ name: "No data", value: 1, category: "unknown" }];
-    return top.map((c) => ({
-      name: CATEGORY_LABELS[c.category] || c.category,
-      value: c.count,
-      category: c.category,
-    }));
-  }, [data]);
+  const corruptionSummary = useMemo(() => {
+    const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
+    const thisWeek = corruption.filter((x) => new Date(x.timestamp).getTime() >= weekAgo);
+    const deptMap = {};
+    const wardMap = {};
+    thisWeek.forEach((x) => {
+      deptMap[x.department || "Unknown"] = (deptMap[x.department || "Unknown"] || 0) + 1;
+      wardMap[x.ward_number || "Unknown"] = (wardMap[x.ward_number || "Unknown"] || 0) + 1;
+    });
+    const topDept = Object.entries(deptMap).sort((a, b) => b[1] - a[1])[0]?.[0] || "-";
+    const topWard = Object.entries(wardMap).sort((a, b) => b[1] - a[1])[0]?.[0] || "-";
+    return { total: thisWeek.length, topDept, topWard };
+  }, [corruption]);
 
   return (
     <div className="w-full h-[100dvh] overflow-y-auto">
@@ -133,174 +141,119 @@ export default function AdminDashboard() {
           </div>
         ) : null}
 
-        <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="rounded-2xl border border-white/10 bg-navy-800/60 px-4 py-4">
-            <div className="text-xs text-slateInk-400">Total queries</div>
-            <div className="mt-1 text-2xl font-bold">{data?.total_queries ?? (loading ? "…" : 0)}</div>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-navy-800/60 px-4 py-4">
-            <div className="text-xs text-slateInk-400">Unanswered rate</div>
-            <div className="mt-1 text-2xl font-bold">{data ? pct(data.unanswered_rate) : (loading ? "…" : "0%")}</div>
-            <div className="mt-2 h-2 rounded-full bg-white/5 overflow-hidden">
-              <div
-                className="h-2 rounded-full bg-amber-500"
-                style={{ width: `${Math.round((data?.unanswered_rate || 0) * 100)}%` }}
-              />
-            </div>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-navy-800/60 px-4 py-4">
-            <div className="text-xs text-slateInk-400">Top category</div>
-            <div className="mt-1 text-xl font-bold">
-              {CATEGORY_LABELS[topCategory] || topCategory}
-            </div>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-navy-800/60 px-4 py-4">
-            <div className="text-xs text-slateInk-400">Queries today</div>
-            <div className="mt-1 text-2xl font-bold">{loading ? "…" : queriesToday}</div>
-          </div>
+        <div className="mt-6 flex flex-wrap gap-2">
+          {tabs.map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`rounded-full px-3 py-1.5 text-xs border ${tab === t ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-200" : "bg-navy-800/60 border-white/10 text-slateInk-300"}`}
+            >
+              {t}
+            </button>
+          ))}
         </div>
 
-        <div className="mt-6 grid grid-cols-1 lg:grid-cols-5 gap-3">
-          <div className="lg:col-span-3 rounded-2xl border border-white/10 bg-navy-800/60 p-4">
-            <div className="text-sm font-semibold">Queries by hour (last 24 hours)</div>
-            <div className="mt-3 h-[260px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data?.queries_by_hour || []}>
-                  <CartesianGrid stroke="rgba(255,255,255,0.06)" />
-                  <XAxis dataKey="hour" stroke="rgba(203,213,225,0.7)" tick={{ fontSize: 12 }} />
-                  <YAxis stroke="rgba(203,213,225,0.7)" tick={{ fontSize: 12 }} allowDecimals={false} />
-                  <Tooltip
-                    contentStyle={{
-                      background: "rgba(15,23,42,0.95)",
-                      border: "1px solid rgba(255,255,255,0.10)",
-                      borderRadius: 12,
-                      color: "white",
-                    }}
-                    cursor={{ fill: "rgba(16,185,129,0.08)" }}
-                  />
-                  <Bar dataKey="count" fill="#10B981" radius={[8, 8, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+        {tab === "analytics" ? (
+          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="rounded-2xl border border-white/10 bg-navy-800/60 px-4 py-4">
+              <div className="text-xs text-slateInk-400">Total queries</div>
+              <div className="mt-1 text-2xl font-bold">{analytics?.total_queries ?? (loading ? "…" : 0)}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-navy-800/60 px-4 py-4">
+              <div className="text-xs text-slateInk-400">Unanswered rate</div>
+              <div className="mt-1 text-2xl font-bold">{Math.round((analytics?.unanswered_rate || 0) * 100)}%</div>
             </div>
           </div>
+        ) : null}
 
-          <div className="lg:col-span-2 rounded-2xl border border-white/10 bg-navy-800/60 p-4">
-            <div className="text-sm font-semibold">Top categories (distribution)</div>
-            <div className="mt-3 h-[260px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Tooltip
-                    contentStyle={{
-                      background: "rgba(15,23,42,0.95)",
-                      border: "1px solid rgba(255,255,255,0.10)",
-                      borderRadius: 12,
-                      color: "white",
-                    }}
-                  />
-                  <Pie
-                    data={categoryPieData}
-                    dataKey="value"
-                    nameKey="name"
-                    innerRadius={62}
-                    outerRadius={92}
-                    paddingAngle={2}
-                  >
-                    {categoryPieData.map((_, idx) => (
-                      <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
+        {tab === "corruption signals" ? (
+          <div className="mt-6 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="rounded-2xl border border-white/10 bg-navy-800/60 px-4 py-4"><div className="text-xs text-slateInk-400">Signals this week</div><div className="text-2xl font-bold">{corruptionSummary.total}</div></div>
+              <div className="rounded-2xl border border-white/10 bg-navy-800/60 px-4 py-4"><div className="text-xs text-slateInk-400">Most affected department</div><div className="text-xl font-bold">{corruptionSummary.topDept}</div></div>
+              <div className="rounded-2xl border border-white/10 bg-navy-800/60 px-4 py-4"><div className="text-xs text-slateInk-400">Most affected ward</div><div className="text-xl font-bold">{corruptionSummary.topWard}</div></div>
             </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {categoryPieData.slice(0, 5).map((c, idx) => (
-                <div
-                  key={c.category}
-                  className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-navy-900/30 px-3 py-1.5 text-xs text-slateInk-300"
-                >
-                  <span
-                    className="h-2 w-2 rounded-full"
-                    style={{ background: PIE_COLORS[idx % PIE_COLORS.length] }}
-                  />
-                  {c.name}: <span className="font-mono text-white">{c.value}</span>
+            <div className="rounded-2xl border border-white/10 bg-navy-800/60 p-4 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="text-slateInk-400 text-xs"><th className="text-left">Timestamp</th><th className="text-left">Ward</th><th className="text-left">Department</th><th className="text-left">Query</th><th className="text-left">Strength</th><th /></tr></thead>
+                <tbody>
+                  {corruption.map((row) => (
+                    <tr key={row.id} className={`${row.resolved ? "opacity-50" : ""} border-t border-white/5`}>
+                      <td>{formatTime(row.timestamp)}</td><td>{row.ward_number || "-"}</td><td>{row.department || "-"}</td><td className="max-w-[380px] truncate">{row.query_text}</td>
+                      <td>
+                        <span className={`px-2 py-1 rounded-full text-xs ${row.signal_strength === "high" ? "bg-red-500/20 text-red-300" : row.signal_strength === "medium" ? "bg-orange-500/20 text-orange-300" : "bg-yellow-500/20 text-yellow-200"}`}>{String(row.signal_strength || "").toUpperCase()}</span>
+                      </td>
+                      <td>{!row.resolved ? <button onClick={async () => { await resolveCorruptionSignal(row.id); load(); }} className="text-xs rounded-lg border border-white/10 px-2 py-1">Mark Resolved</button> : "Resolved"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : null}
+
+        {tab === "officer accountability" ? <SimpleTable title="Sakala services" rows={officerData} columns={["service_name", "department", "responsible_officer", "sakala_timeline_days", "penalty_per_day", "escalation_count"]} /> : null}
+        {tab === "collective grievances" ? <SimpleTable title="Collective grievances" rows={collectiveData} columns={["ward_number", "issue_type", "complaint_count", "first_reported", "status", "assigned_engineer"]} pulseColumn="complaint_count" /> : null}
+        {tab === "infrastructure memory" ? <SimpleTable title="Infrastructure memory" rows={infraData} columns={["ward_number", "issue_type", "reported_count", "status", "assigned_engineer", "expected_resolution"]} /> : null}
+        {tab === "silence patterns" ? (
+          <div className="mt-6 space-y-3">
+            {silenceData.map((s) => (
+              <div key={s.id} className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3">
+                Ward {s.ward_number} - {s.issue_type} complaints dropped from {Math.round(s.previous_avg)} to {s.current_count}. Silence does not mean resolution.
+                {!s.acknowledged ? <button className="ml-3 rounded-lg border border-white/20 px-2 py-1 text-xs" onClick={async () => { await acknowledgeSilencePattern(s.id); load(); }}>Acknowledge</button> : <span className="ml-3 text-xs">Acknowledged</span>}
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {tab === "community wisdom" ? <div className="mt-6 rounded-2xl border border-white/10 bg-navy-800/60 p-4 text-sm text-slateInk-300">Community wisdom moderation is available via backend routes and `/wisdom` page.</div> : null}
+        {tab === "rights alerts" ? <SimpleTable title="Rights alerts" rows={rightsData} columns={["article", "right_name", "ward_number", "query_text", "timestamp"]} /> : null}
+        {tab === "civic twin" ? (
+          <div className="mt-6">
+            <div className="rounded-2xl border border-white/10 bg-navy-800/60 p-4 mb-3">City health score: <span className="font-bold">{civicTwin?.city_health_score ?? "-"}</span></div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {(civicTwin?.wards || []).map((w) => (
+                <div key={w.ward_number} className={`rounded-2xl border p-3 ${w.health_score > 70 ? "border-green-500/40" : w.health_score >= 40 ? "border-yellow-500/40" : "border-red-500/40"}`}>
+                  <div className="text-xs text-slateInk-400">{w.ward_name}</div>
+                  <div className="text-xl font-bold">{w.health_score}</div>
                 </div>
               ))}
             </div>
           </div>
-        </div>
-
-        <div className="mt-6 rounded-2xl border border-white/10 bg-navy-800/60 p-4">
-          <div className="text-sm font-semibold">Recent queries</div>
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[900px] border-separate border-spacing-y-2">
-              <thead>
-                <tr className="text-left text-xs text-slateInk-400">
-                  <th className="px-3 py-2">Query</th>
-                  <th className="px-3 py-2">Category</th>
-                  <th className="px-3 py-2">Confidence</th>
-                  <th className="px-3 py-2">Escalated</th>
-                  <th className="px-3 py-2">Time</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(data?.recent_queries || []).map((q, idx) => {
-                  const conf = clamp01(q.confidence);
-                  const confColor =
-                    conf >= 0.75 ? "bg-emerald-500" : conf >= 0.45 ? "bg-amber-500" : "bg-red-500";
-                  return (
-                    <tr key={`${q.timestamp}-${idx}`} className="bg-navy-900/30 border border-white/10">
-                      <td className="px-3 py-3 rounded-l-xl">
-                        <div className="text-sm text-white line-clamp-2">{q.query_text}</div>
-                        <div className="mt-1 text-[11px] text-slateInk-500">
-                          Session: <span className="font-mono">{q.session_id?.slice(0, 8)}</span> · Lang:{" "}
-                          <span className="font-mono">{q.language}</span>
-                        </div>
-                      </td>
-                      <td className="px-3 py-3">
-                        <span className="rounded-full border border-white/10 bg-navy-800/70 px-2.5 py-1 text-xs text-slateInk-300">
-                          {CATEGORY_LABELS[q.category] || q.category}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-40 h-2 rounded-full bg-white/5 overflow-hidden">
-                            <div
-                              className={`h-2 rounded-full ${confColor}`}
-                              style={{ width: `${Math.round(conf * 100)}%` }}
-                            />
-                          </div>
-                          <span className="font-mono text-xs text-white">{conf.toFixed(2)}</span>
-                        </div>
-                      </td>
-                      <td className="px-3 py-3">
-                        {q.escalated ? (
-                          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-200">
-                            Yes
-                          </span>
-                        ) : (
-                          <span className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-200">
-                            No
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-3 rounded-r-xl text-xs text-slateInk-300 font-mono">
-                        {formatTime(q.timestamp)}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {!loading && (data?.recent_queries || []).length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-3 py-6 text-center text-sm text-slateInk-400">
-                      No queries logged yet. Open the chat and ask a question to generate analytics.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
+        ) : null}
+        {tab === "reckoning report" ? (
+          <div className="mt-6 rounded-2xl border border-white/10 bg-navy-800/60 p-4">
+            <div className="text-xs text-slateInk-400">Severity</div>
+            <div className="text-xl font-bold">{reckoning?.report?.severity_rating}</div>
+            <div className="mt-2 text-lg font-semibold">{reckoning?.report?.headline}</div>
+            <div className="mt-3 text-sm text-slateInk-300 whitespace-pre-wrap">{reckoning?.report?.full_report_text}</div>
+            <div className="mt-3 text-xs text-slateInk-400">Email to Commissioner action currently logs only.</div>
           </div>
-        </div>
+        ) : null}
       </div>
+    </div>
+  );
+}
+
+function SimpleTable({ title, rows, columns, pulseColumn }) {
+  return (
+    <div className="mt-6 rounded-2xl border border-white/10 bg-navy-800/60 p-4 overflow-x-auto">
+      <div className="text-sm font-semibold mb-3">{title}</div>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-slateInk-400 text-xs">{columns.map((c) => <th key={c} className="text-left">{c}</th>)}</tr>
+        </thead>
+        <tbody>
+          {(rows || []).map((r, i) => (
+            <tr key={i} className="border-t border-white/5">
+              {columns.map((c) => {
+                const v = r[c];
+                const pulse = pulseColumn === c && Number(v) > 20;
+                return <td key={c} className={pulse ? "text-red-300 animate-pulse" : ""}>{String(v ?? "-")}</td>;
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

@@ -1,14 +1,33 @@
 from __future__ import annotations
+import json
 import os
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
+from apscheduler.schedulers.background import BackgroundScheduler
 from starlette.concurrency import run_in_threadpool
 
 from analytics import get_analytics, log_query
+from civic_features import (
+    append_verified_wisdom,
+    classify_issue_type,
+    corruption_signal_check,
+    detect_constitutional_alert,
+    detect_poverty_indicators,
+    detect_ward_from_text,
+    find_sakala_service,
+    handle_collective_grievance,
+    handle_infrastructure_memory,
+    load_officer_data,
+    load_ward_data,
+    run_silence_detection_job,
+    upsert_query_volume,
+)
+from db_init import connect_db, init_all_tables, utc_now_iso
 from models import AnalyticsResponse, QueryRequest, QueryResponse
 from rag import get_confidence, get_index, retrieve
 
@@ -53,7 +72,7 @@ def _format_chunks(chunks: list[dict[str, Any]]) -> str:
         )
     return "\n\n".join(lines).strip()
 
-
+ 
 def _fallback_answer(chunks: list[dict[str, Any]], language: str) -> str:
     if not chunks:
         return (
@@ -192,6 +211,10 @@ def _cerebras_generate(system_prompt: str, user_message: str) -> str:
 
 
 app = FastAPI(title="ClawBot (CivicBot) API", version="1.0.0")
+init_all_tables()
+WARD_DATA = load_ward_data()
+OFFICER_SERVICES = load_officer_data()
+SCHEDULER = BackgroundScheduler(timezone="UTC")
 
 app.add_middleware(
     CORSMiddleware,
@@ -219,6 +242,7 @@ async def chat(req: QueryRequest) -> dict[str, Any]:
     if not message:
         raise HTTPException(status_code=400, detail="message is required")
 
+    ward_number, ward_info = detect_ward_from_text(message, WARD_DATA)
     chunks = retrieve(message, top_k=3)
     scores = [float(c.get("score", 0.0)) for c in chunks]
     confidence = get_confidence(scores)
@@ -228,6 +252,18 @@ async def chat(req: QueryRequest) -> dict[str, Any]:
     escalate = confidence < 0.45
 
     retrieved_chunks = _format_chunks(chunks)
+    ward_context = ""
+    if ward_info:
+        ward_context = (
+            f"\nWard context:\nThe citizen is from {ward_info.get('name')} (Ward {ward_number}). "
+            f"Ward-specific info: {json.dumps(ward_info, ensure_ascii=False)}"
+        )
+    else:
+        ward_context = (
+            "\nWard context:\nIf useful, ask one follow-up: "
+            "'Which ward or area are you in? This helps me give you exact information.'"
+        )
+
     system_prompt = f"""
 You are CivicBot, a helpful AI assistant for municipal services in Belagavi, Karnataka, India.
 Help citizens with: trade licences, property tax, building permits, utility connections, certificates, grievances.
@@ -243,6 +279,7 @@ Rules:
 
 Relevant knowledge base context:
 {retrieved_chunks}
+{ward_context}
 """.strip()
 
     try:
@@ -250,6 +287,93 @@ Relevant knowledge base context:
     except Exception:
         # Hard fail-safe: still answer using KB without hallucinating.
         answer = _fallback_answer(chunks, req.language)
+
+    issue_type = classify_issue_type(message)
+    if issue_type:
+        upsert_query_volume(ward_number, issue_type)
+        infra_msg = handle_infrastructure_memory(ward_number, issue_type, message)
+        collective_msg = handle_collective_grievance(ward_number, issue_type, message)
+        if infra_msg:
+            answer = f"{answer}\n\n{infra_msg}"
+        if collective_msg:
+            answer = f"{answer}\n\n{collective_msg}"
+
+    service = find_sakala_service(message, OFFICER_SERVICES)
+    if service:
+        answer = (
+            f"{answer}\n\nThe officer responsible for this is {service.get('responsible_officer')}. "
+            f"Under the Karnataka Sakala Services Act, this must be completed in {service.get('sakala_timeline_days')} days. "
+            f"If not, {service.get('responsible_officer')} is legally accountable and you can claim "
+            f"Rs.{service.get('penalty_per_day')}/day compensation. "
+            f"To escalate: contact {service.get('escalation_officer')} via {service.get('contact')}."
+        )
+
+    const_alert = detect_constitutional_alert(message, ward_number)
+    if const_alert:
+        article, right_name = const_alert
+        answer = (
+            f"{answer}\n\n⚖️ RIGHTS ALERT: What you are describing may be a violation of {article} "
+            f"of the Indian Constitution — {right_name}.\n"
+            "You have the right to approach the Karnataka High Court via a Public Interest Petition.\n"
+            "1. Draft a petition describing the violation\n"
+            "2. File at Karnataka High Court Registry, Bengaluru\n"
+            "3. No lawyer required for PIL\n"
+            "4. Filing fee: Rs.0 for public interest matters\n"
+            "You can also file a complaint with the Karnataka Lokayukta."
+        )
+
+    life_event = None
+    if "birth registration" in message.lower() or "birth certificate" in message.lower():
+        life_event = "birth"
+    elif "death registration" in message.lower() or "death certificate" in message.lower():
+        life_event = "death"
+    elif "marriage registration" in message.lower() or "marriage certificate" in message.lower():
+        life_event = "marriage"
+    elif message.strip().upper() == "YES":
+        with connect_db() as conn:
+            recent = conn.execute(
+                "SELECT query_text FROM session_query_memory WHERE session_id=? ORDER BY timestamp DESC LIMIT 5",
+                (req.session_id,),
+            ).fetchall()
+        joined = " ".join([r["query_text"].lower() for r in recent])
+        if "birth" in joined:
+            life_event = "birth"
+        elif "death" in joined:
+            life_event = "death"
+        elif "marriage" in joined:
+            life_event = "marriage"
+
+    if life_event and message.strip().upper() != "YES":
+        answer = (
+            f"{answer}\n\nWould you like me to create a civic action timeline based on this event? "
+            "It will show you every government service you'll need in the coming years. Reply YES to generate."
+        )
+    elif life_event and message.strip().upper() == "YES":
+        prompt = (
+            "You are a civic life planner for Karnataka, India.\n"
+            f"A citizen in Belagavi just completed a {life_event} registration.\n"
+            "Generate a complete civic reminder timeline — all government actions they will need to take in coming years.\n"
+            "Return ONLY valid JSON:\n"
+            "{timeline: [{age_or_date: string, action: string, department: string, documents_needed: [string], "
+            "importance: 'critical'|'important'|'optional', deadline_strict: bool}]}"
+        )
+        try:
+            timeline_resp = _cerebras_client().chat.completions.create(
+                model="llama-3.3-70b",
+                messages=[{"role": "system", "content": prompt}, {"role": "user", "content": req.message}],
+                temperature=0.2,
+            )
+            payload = (timeline_resp.choices[0].message.content if timeline_resp.choices else "") or ""
+            answer = f"{answer}\n\nYour Civic Life Roadmap:\n{payload}"
+        except Exception:
+            pass
+
+    answer = append_verified_wisdom(answer, ward_number, category)
+
+    try:
+        corruption_signal_check(_cerebras_client(), message, ward_number, dept)
+    except Exception:
+        pass
 
     # If escalation is required but the model didn't include the escalation sentence, append it.
     if escalate and dept and contact:
@@ -261,6 +385,21 @@ Relevant knowledge base context:
 
     followups = _suggested_followups(category, req.language)
     action_cards = _action_cards_for(category, dept, contact)
+    poverty_report = detect_poverty_indicators(req.session_id, message, _cerebras_client())
+    if poverty_report:
+        action_cards.append(
+            {
+                "label": f"Eligible schemes: {len(poverty_report.get('schemes', []))}",
+                "type": "link",
+                "url": None,
+                "phone": None,
+            }
+        )
+        answer = (
+            f"{answer}\n\n🔴 Based on your queries, you may qualify for "
+            f"{len(poverty_report.get('schemes', []))} government schemes worth "
+            f"Rs.{int(poverty_report.get('total_potential_monthly_benefit', 0))}/month."
+        )
 
     log_query(
         session_id=req.session_id,
@@ -281,4 +420,291 @@ Relevant knowledge base context:
         "action_cards": action_cards,
         "suggested_followups": followups,
     }
+
+
+@app.on_event("startup")
+def startup_jobs() -> None:
+    if not SCHEDULER.running:
+        SCHEDULER.add_job(run_silence_detection_job, trigger="interval", hours=24, id="silence_job", replace_existing=True)
+        SCHEDULER.start()
+
+
+@app.on_event("shutdown")
+def shutdown_jobs() -> None:
+    if SCHEDULER.running:
+        SCHEDULER.shutdown(wait=False)
+
+
+@app.get("/admin/corruption-signals")
+async def admin_corruption_signals() -> dict[str, Any]:
+    with connect_db() as conn:
+        rows = [dict(r) for r in conn.execute("SELECT * FROM corruption_signals ORDER BY timestamp DESC").fetchall()]
+    return {"items": rows}
+
+
+@app.patch("/admin/corruption-signals/{signal_id}/resolve")
+async def resolve_corruption_signal(signal_id: int) -> dict[str, Any]:
+    with connect_db() as conn:
+        conn.execute("UPDATE corruption_signals SET resolved=1 WHERE id=?", (signal_id,))
+        conn.commit()
+    return {"ok": True}
+
+
+@app.get("/admin/officer-accountability")
+async def admin_officer_accountability() -> dict[str, Any]:
+    with connect_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT department, COUNT(*) AS escalation_count
+            FROM corruption_signals
+            GROUP BY department
+            """
+        ).fetchall()
+    counts = {r["department"]: int(r["escalation_count"]) for r in rows}
+    services = []
+    for svc in OFFICER_SERVICES:
+        item = dict(svc)
+        item["escalation_count"] = counts.get(item.get("department"), 0)
+        services.append(item)
+    return {"services": services}
+
+
+@app.get("/admin/collective-grievances")
+async def admin_collective_grievances() -> dict[str, Any]:
+    with connect_db() as conn:
+        rows = [dict(r) for r in conn.execute("SELECT * FROM collective_grievances ORDER BY complaint_count DESC").fetchall()]
+    return {"items": rows}
+
+
+@app.get("/admin/grievances/{grievance_id}/petition")
+async def grievance_petition(grievance_id: int) -> dict[str, Any]:
+    with connect_db() as conn:
+        row = conn.execute("SELECT * FROM collective_grievances WHERE id=?", (grievance_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="grievance not found")
+    text = (
+        "GROUP PETITION - BELAGAVI CITY CORPORATION\n\n"
+        f"Ward: {row['ward_number']}\nIssue: {row['issue_type']}\n"
+        f"Total complaints: {row['complaint_count']}\n"
+        f"First reported: {row['first_reported']}\nLatest reported: {row['last_reported']}\n\n"
+        "Citizen evidence snippets:\n"
+        f"{row['citizen_queries'] or ''}\n"
+    )
+    return {"petition_text": text}
+
+
+@app.get("/admin/infrastructure-memory")
+async def admin_infra_memory() -> dict[str, Any]:
+    with connect_db() as conn:
+        rows = [dict(r) for r in conn.execute("SELECT * FROM infrastructure_issues ORDER BY updated_at DESC").fetchall()]
+    return {"items": rows}
+
+
+@app.patch("/admin/infrastructure-memory/{issue_id}")
+async def update_infra_issue(issue_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+    allowed = {"status", "assigned_engineer", "expected_resolution"}
+    sets: list[str] = []
+    vals: list[Any] = []
+    for key in allowed:
+        if key in payload:
+            sets.append(f"{key}=?")
+            vals.append(payload[key])
+    if not sets:
+        return {"ok": True}
+    sets.append("updated_at=?")
+    vals.append(utc_now_iso())
+    vals.append(issue_id)
+    with connect_db() as conn:
+        conn.execute(f"UPDATE infrastructure_issues SET {', '.join(sets)} WHERE id=?", tuple(vals))
+        conn.commit()
+    return {"ok": True}
+
+
+@app.get("/admin/silence-patterns")
+async def admin_silence_patterns() -> dict[str, Any]:
+    with connect_db() as conn:
+        rows = [dict(r) for r in conn.execute("SELECT * FROM silence_alerts ORDER BY flagged_at DESC").fetchall()]
+    return {"items": rows}
+
+
+@app.patch("/admin/silence-patterns/{alert_id}/ack")
+async def ack_silence(alert_id: int) -> dict[str, Any]:
+    with connect_db() as conn:
+        conn.execute("UPDATE silence_alerts SET acknowledged=1 WHERE id=?", (alert_id,))
+        conn.commit()
+    return {"ok": True}
+
+
+@app.post("/wisdom")
+async def post_wisdom(payload: dict[str, Any]) -> dict[str, Any]:
+    with connect_db() as conn:
+        conn.execute(
+            """
+            INSERT INTO community_wisdom
+            (contributor_name, contributor_age, ward_number, wisdom_text, category, verified, submitted_at, upvotes)
+            VALUES (?, ?, ?, ?, ?, 0, ?, 0)
+            """,
+            (
+                payload.get("contributor_name"),
+                payload.get("contributor_age"),
+                payload.get("ward_number"),
+                payload.get("wisdom_text"),
+                payload.get("category", "general"),
+                utc_now_iso(),
+            ),
+        )
+        conn.commit()
+    return {"ok": True}
+
+
+@app.get("/wisdom")
+async def get_wisdom(ward: str | None = None) -> dict[str, Any]:
+    with connect_db() as conn:
+        if ward:
+            rows = conn.execute(
+                "SELECT * FROM community_wisdom WHERE verified=1 AND ward_number=? ORDER BY upvotes DESC, submitted_at DESC",
+                (ward,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM community_wisdom WHERE verified=1 ORDER BY upvotes DESC, submitted_at DESC"
+            ).fetchall()
+    return {"items": [dict(r) for r in rows]}
+
+
+@app.patch("/admin/wisdom/{wisdom_id}/verify")
+async def verify_wisdom(wisdom_id: int) -> dict[str, Any]:
+    with connect_db() as conn:
+        row = conn.execute("SELECT * FROM community_wisdom WHERE id=?", (wisdom_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="wisdom not found")
+        conn.execute("UPDATE community_wisdom SET verified=1 WHERE id=?", (wisdom_id,))
+        conn.commit()
+    return {"ok": True}
+
+
+@app.get("/admin/rights-alerts")
+async def admin_rights_alerts() -> dict[str, Any]:
+    with connect_db() as conn:
+        rows = [dict(r) for r in conn.execute("SELECT * FROM constitutional_alerts ORDER BY timestamp DESC").fetchall()]
+    return {"items": rows}
+
+
+@app.get("/admin/civic-twin")
+async def admin_civic_twin() -> dict[str, Any]:
+    ward_rows: list[dict[str, Any]] = []
+    with connect_db() as conn:
+        for ward_num, ward_info in WARD_DATA.items():
+            water = conn.execute(
+                "SELECT COUNT(*) AS c FROM infrastructure_issues WHERE ward_number=? AND issue_type='water' AND status='open'",
+                (ward_num,),
+            ).fetchone()["c"]
+            corr = conn.execute(
+                "SELECT COUNT(*) AS c FROM corruption_signals WHERE ward_number=?",
+                (ward_num,),
+            ).fetchone()["c"]
+            coll = conn.execute(
+                "SELECT COUNT(*) AS c FROM collective_grievances WHERE ward_number=? AND status='open'",
+                (ward_num,),
+            ).fetchone()["c"]
+            silence = conn.execute(
+                "SELECT COUNT(*) AS c FROM silence_alerts WHERE ward_number=? AND acknowledged=0",
+                (ward_num,),
+            ).fetchone()["c"]
+            rights = conn.execute(
+                "SELECT COUNT(*) AS c FROM constitutional_alerts WHERE ward_number=?",
+                (ward_num,),
+            ).fetchone()["c"]
+            wisdom = conn.execute(
+                "SELECT COUNT(*) AS c FROM community_wisdom WHERE ward_number=? AND verified=1",
+                (ward_num,),
+            ).fetchone()["c"]
+            score = int(max(0, min(100, 100 - (water * 2) - (corr * 5) - (coll * 3) - (silence * 4) - (rights * 8) + (wisdom * 2))))
+            ward_rows.append(
+                {
+                    "ward_number": ward_num,
+                    "ward_name": ward_info.get("name"),
+                    "water_complaints": water,
+                    "corruption_signals_count": corr,
+                    "collective_grievances_count": coll,
+                    "silence_score": silence,
+                    "constitutional_alerts": rights,
+                    "community_wisdom_count": wisdom,
+                    "health_score": score,
+                }
+            )
+    city_avg = sum(w["health_score"] for w in ward_rows) / max(1, len(ward_rows))
+    critical = min(ward_rows, key=lambda x: x["health_score"]) if ward_rows else None
+    return {"city_health_score": round(city_avg, 2), "most_critical_ward": critical, "wards": ward_rows}
+
+
+@app.get("/admin/reckoning-report")
+async def admin_reckoning_report() -> dict[str, Any]:
+    since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    with connect_db() as conn:
+        top_dept = [
+            dict(r)
+            for r in conn.execute(
+                """
+                SELECT department, COUNT(*) AS count
+                FROM corruption_signals
+                WHERE timestamp>=?
+                GROUP BY department
+                ORDER BY count DESC
+                LIMIT 3
+                """,
+                (since,),
+            ).fetchall()
+        ]
+        top_ward = conn.execute(
+            """
+            SELECT ward_number, SUM(complaint_count) AS c
+            FROM collective_grievances
+            GROUP BY ward_number
+            ORDER BY c DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        unresolved_issue = conn.execute(
+            """
+            SELECT issue_type, COUNT(*) AS c
+            FROM infrastructure_issues
+            WHERE status!='resolved'
+            GROUP BY issue_type
+            ORDER BY c DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        rights_count = conn.execute("SELECT COUNT(*) AS c FROM constitutional_alerts WHERE timestamp>=?", (since,)).fetchone()["c"]
+        silence_rows = [dict(r) for r in conn.execute("SELECT * FROM silence_alerts WHERE flagged_at>=?", (since,)).fetchall()]
+        longest = conn.execute(
+            "SELECT query_text FROM queries WHERE timestamp>=? ORDER BY LENGTH(query_text) DESC LIMIT 1",
+            (since,),
+        ).fetchone()
+    payload = {
+        "headline": "Belagavi Civic Accountability Weekly",
+        "most_failed_department": top_dept[0]["department"] if top_dept else "N/A",
+        "most_suffering_ward": (top_ward["ward_number"] if top_ward else "N/A"),
+        "corruption_summary": f"Top departments: {top_dept}",
+        "silence_zones_summary": f"Silence alerts: {len(silence_rows)}",
+        "constitutional_violations_summary": f"Rights alerts in 7 days: {rights_count}",
+        "citizen_story_of_week": (longest["query_text"] if longest else "N/A"),
+        "full_report_text": (
+            f"Top corruption departments: {top_dept}. "
+            f"Ward with highest complaints: {(top_ward['ward_number'] if top_ward else 'N/A')}. "
+            f"Most common unresolved issue: {(unresolved_issue['issue_type'] if unresolved_issue else 'N/A')}."
+        ),
+        "severity_rating": "CRITICAL" if rights_count > 10 else "SERIOUS" if rights_count > 4 else "MODERATE",
+        "generated_at": utc_now_iso(),
+    }
+    with connect_db() as conn:
+        conn.execute("INSERT INTO reckoning_reports (generated_at, payload_json) VALUES (?, ?)", (utc_now_iso(), json.dumps(payload)))
+        archived = [
+            {"generated_at": r["generated_at"], **json.loads(r["payload_json"])}
+            for r in conn.execute(
+                "SELECT generated_at, payload_json FROM reckoning_reports ORDER BY generated_at DESC LIMIT 4"
+            ).fetchall()
+        ]
+        conn.commit()
+    return {"report": payload, "archive": archived}
 
