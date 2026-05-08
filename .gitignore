@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+
+# Environment/secrets
+.env
+.env.*
+
+# Local databases / generated stores
+backend/chroma_db/
+backend/*.db
+
+# Node
+node_modules/
+dist/
+.vite/
+
