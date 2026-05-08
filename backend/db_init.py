@@ -26,6 +26,7 @@ def init_all_tables() -> None:
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               session_id TEXT NOT NULL,
               query_text TEXT NOT NULL,
+              response_text TEXT,
               category TEXT NOT NULL,
               confidence REAL NOT NULL,
               escalated INTEGER NOT NULL,
@@ -34,6 +35,10 @@ def init_all_tables() -> None:
             )
             """
         )
+        # Backward-compatible migration for existing databases.
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(queries)").fetchall()}
+        if "response_text" not in cols:
+            conn.execute("ALTER TABLE queries ADD COLUMN response_text TEXT")
 
         conn.execute(
             """

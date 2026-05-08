@@ -11,6 +11,7 @@ init_all_tables()
 def log_query(
     session_id: str,
     query_text: str,
+    response_text: str,
     category: str,
     confidence: float,
     escalated: bool,
@@ -20,12 +21,13 @@ def log_query(
     with connect_db() as conn:
         conn.execute(
             """
-            INSERT INTO queries (session_id, query_text, category, confidence, escalated, timestamp, language)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO queries (session_id, query_text, response_text, category, confidence, escalated, timestamp, language)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 session_id,
                 query_text,
+                response_text,
                 category,
                 float(confidence),
                 1 if escalated else 0,

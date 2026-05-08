@@ -160,6 +160,7 @@ def _suggested_followups(category: str, language: str) -> list[str]:
         ],
         "certificate": [
             "ಯಾವ ಸರ್ಟಿಫಿಕೇಟ್ ಬೇಕು (ಜನನ/ಮರಣ/ಮದುವೆ/ನಿವಾಸ)?",
+            
             "ಜನನ/ಮರಣ ನೋಂದಣಿ ಈಗಾಗಲೇ ಆಗಿದೆಯಾ?",
             "ತಿದ್ದುಪಡಿ ಬೇಕಾ ಅಥವಾ ಹೊಸ ಸರ್ಟಿಫಿಕೇಟ್ ಬೇಕಾ?",
         ],
@@ -404,6 +405,7 @@ Relevant knowledge base context:
     log_query(
         session_id=req.session_id,
         query_text=message,
+        response_text=answer,
         category=category,
         confidence=confidence,
         escalated=escalate,
