@@ -405,6 +405,57 @@
   fill: #fff;
 }
 
+/* Language bar */
+#clawbot-lang-bar {
+  padding: 4px 12px 6px 12px;
+  background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+#clawbot-lang-select {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #ccc;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  outline: none;
+  width: 100%;
+}
+
+#clawbot-lang-select:hover {
+  background: rgba(255,255,255,0.1);
+}
+
+#clawbot-mic {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#clawbot-mic:hover {
+  background: rgba(255,255,255,0.1);
+}
+
+#clawbot-lang-bar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.06); flex-wrap: wrap; }
+#clawbot-lang-label { font-size: 10px; color: #666; flex-shrink: 0; }
+#clawbot-lang-pills { display: flex; gap: 4px; flex-wrap: wrap; }
+.lang-pill { padding: 2px 8px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.04); color: #888; font-size: 11px; cursor: pointer; transition: all 0.15s; }
+.lang-pill:hover { background: rgba(255,140,0,0.15); color: #fff; border-color: rgba(255,140,0,0.3); }
+.lang-pill.active { background: rgba(255,140,0,0.25); color: #ff8c00; border-color: rgba(255,140,0,0.5); font-weight: bold; }
+#clawbot-mic { width: 34px; height: 34px; border-radius: 50%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink: 0; }
+#clawbot-mic:hover { background: rgba(255,140,0,0.2); border-color: rgba(255,140,0,0.4); }
+#clawbot-mic.recording { background: rgba(255,50,50,0.3) !important; border-color: rgba(255,50,50,0.6) !important; animation: mic-pulse 1s infinite; }
+@keyframes mic-pulse { 0% { transform: scale(1); box-shadow: 0 0 0 rgba(255,50,50,0.4); } 70% { transform: scale(1.1); box-shadow: 0 0 0 8px rgba(255,50,50,0); } 100% { transform: scale(1); box-shadow: 0 0 0 rgba(255,50,50,0); } }
+
 /* Drag handle hint */
 #clawbot-drag-hint {
   text-align: center;

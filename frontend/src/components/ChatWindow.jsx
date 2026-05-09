@@ -1,30 +1,135 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Building2, Sparkles, ShieldCheck } from "lucide-react";
 import { motion } from "framer-motion";
-import { sendMessage } from "../utils/api.js";
+import { CLAWBOT_CONFIG } from "../clawbot.config.js";
 import MessageBubble from "./MessageBubble.jsx";
 import InputBar from "./InputBar.jsx";
 import QuickReplies from "./QuickReplies.jsx";
 import TypingIndicator from "./TypingIndicator.jsx";
 
-function getOrCreateSessionId() {
-  const key = "civicbot_session_id";
-  const existing = sessionStorage.getItem(key);
-  if (existing) return existing;
-  const id = (crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`).toString();
-  sessionStorage.setItem(key, id);
-  return id;
-}
-
 const WELCOME_EN =
-  "Hello! I’m CivicBot — your municipal services assistant for Belagavi.\n\nAsk me about trade licences, property tax, building permits, utility connections, certificates, or grievances. How can I help today?";
+  "Hello! I'm CLAWBOT — your helpful AI assistant.\n\nAsk me anything. How can I help today?";
 
 const WELCOME_KN =
-  "ನಮಸ್ಕಾರ! ನಾನು CivicBot — ಬೆಳಗಾವಿಯ ನಗರ ಸೇವೆಗಳ ಸಹಾಯಕ.\n\nಟ್ರೇಡ್ ಲೈಸೆನ್ಸ್, ಪ್ರಾಪರ್ಟಿ ಟ್ಯಾಕ್ಸ್, ಬಿಲ್ಡಿಂಗ್ ಪರ್ಮಿಟ್, ಯೂಟಿಲಿಟಿ ಸಂಪರ್ಕ, ಸರ್ಟಿಫಿಕೇಟ್‌ಗಳು, ದೂರುಗಳ ಬಗ್ಗೆ ಕೇಳಬಹುದು. ಇಂದು ಹೇಗೆ ಸಹಾಯ ಮಾಡಲಿ?";
+  "ನಮಸ್ಕಾರ! ನಾನು CLAWBOT — ನಿಮ್ಮ ಸಹಾಯಕ AI.\n\nಏನನ್ನಾದರೂ ಕೇಳಿ. ಇಂದು ಹೇಗೆ ಸಹಾಯ ಮಾಡಲಿ?";
+
+const CIVIC_KEYWORDS = [
+  "tax", "property tax", "licence", "license", "trade licence",
+  "complaint", "municipal", "corporation", "certificate",
+  "application", "status", "renewal", "water bill", "electricity",
+  "birth certificate", "death certificate", "permit", "noc",
+  "belagavi", "bbmp", "pmc", "nmc", "ward", "councillor",
+  "garbage", "sanitation", "road", "pothole", "drainage"
+];
+
+function isCivicQuery(message) {
+  const lower = message.toLowerCase();
+  return CIVIC_KEYWORDS.some(keyword => lower.includes(keyword));
+}
+
+const CIVIC_SITES = [
+  "https://bbmpgov.in",
+  "https://www.belagavicitycouncil.gov.in",
+  "https://mygov.in",
+  "https://services.india.gov.in"
+];
+
+async function scrapeForContext(userQuery) {
+  // Pick most relevant site based on keywords
+  let targetUrl = CIVIC_SITES[0]; // default
+
+  if (userQuery.toLowerCase().includes("belagavi")) {
+    targetUrl = "https://www.belagavicitycouncil.gov.in";
+  } else if (userQuery.toLowerCase().includes("tax") || 
+             userQuery.toLowerCase().includes("property")) {
+    targetUrl = "https://bbmpgov.in";
+  } else if (userQuery.toLowerCase().includes("certificate") || 
+             userQuery.toLowerCase().includes("application")) {
+    targetUrl = "https://services.india.gov.in";
+  }
+
+  try {
+    // Jina AI API with API key for more reliable scraping
+    const jinaUrl = `https://r.jina.ai/${targetUrl}`;
+    const response = await fetch(jinaUrl, {
+      headers: {
+        "Accept": "text/plain",
+        "Authorization": `Bearer jina_617c047dc36642ffaa456557af19ab032NC2nSt4KKhiLBrfnpXZhIjoMfU3`
+      }
+    });
+    const text = await response.text();
+    // Return first 2000 chars to not overflow Cerebras context
+    return text.slice(0, 2000);
+  } catch (err) {
+    console.error("Scraping failed:", err);
+    return null;
+  }
+}
+
+async function sendMessage(userMessage) {
+  const apiKey = CLAWBOT_CONFIG.CEREBRAS_API_KEY;
+  
+  let systemPrompt = CLAWBOT_CONFIG.SYSTEM_PROMPT;
+  let scrapedContext = null;
+
+  // Check if civic query — if yes scrape first
+  if (isCivicQuery(userMessage)) {
+    scrapedContext = await scrapeForContext(userMessage);
+  }
+
+  // Build system prompt with or without scraped data
+  if (scrapedContext) {
+    systemPrompt = `You are CLAWBOT, a civic AI assistant.
+      
+The user asked a civic/municipal question.
+Here is live data scraped from the relevant government website:
+
+--- SCRAPED DATA START ---
+${scrapedContext}
+--- SCRAPED DATA END ---
+
+Use this data to answer the user's question accurately.
+If the scraped data doesn't directly answer the question, 
+use your knowledge but mention the user should verify officially.
+Be clear, helpful and concise.`;
+  }
+
+  const response = await fetch("https://api.cerebras.ai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: CLAWBOT_CONFIG.MODEL,
+      messages: [
+        {
+          role: "system",
+          content: systemPrompt
+        },
+        { role: "user", content: userMessage }
+      ],
+      max_tokens: 512,
+      temperature: 0.7
+    })
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    const detail = data?.error?.message || data?.message || `Request failed (${response.status})`;
+    throw new Error(detail);
+  }
+
+  if (!data.choices?.[0]?.message?.content) {
+    throw new Error(data?.error?.message || "Sorry, I couldn't get a response. Check your API key.");
+  }
+
+  return data.choices[0].message.content;
+}
 
 export default function ChatWindow() {
-  const sessionId = useMemo(getOrCreateSessionId, []);
   const [language, setLanguage] = useState("en");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -79,27 +184,24 @@ export default function ChatWindow() {
     setMessages((m) => [...m, userMsg]);
 
     try {
-      const res = await sendMessage(trimmed, language, sessionId);
+      const answerText = await sendMessage(trimmed);
       const botMsg = {
         id: `b_${Date.now()}`,
         role: "bot",
-        text: res.answer,
-        confidence: res.confidence,
-        category: res.category,
-        escalate: res.escalate,
-        department: res.department,
-        contact: res.contact,
-        action_cards: res.action_cards || [],
-        suggested_followups: res.suggested_followups || [],
+        text: answerText,
+        confidence: 1,
+        category: "chat",
+        escalate: false,
+        action_cards: [],
+        suggested_followups: [],
       };
       setMessages((m) => [...m, botMsg]);
     } catch (e) {
       const msg =
-        e?.response?.data?.detail ||
         e?.message ||
         (language === "kn"
-          ? "ಸರ್ವರ್ ಸಂಪರ್ಕವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಸ್ವಲ್ಪ ಸಮಯದ ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ."
-          : "Couldn’t reach the server. Please try again in a moment.");
+          ? "API ಕರೆ ವಿಫಲವಾಗಿದೆ. ನಿಮ್ಮ API ಕೀ ಮತ್ತು ನೆಟ್‌ವರ್ಕ್ ಪರಿಶೀಲಿಸಿ."
+          : "API request failed. Check your API key and network.");
       setError(msg);
       setMessages((m) => [
         ...m,
@@ -189,7 +291,15 @@ export default function ChatWindow() {
               transition={{ duration: 0.2 }}
               className="pt-2"
             >
-              <QuickReplies onPick={onSend} />
+              <QuickReplies
+                prompts={[
+                  "What can you help with?",
+                  "Summarize this page",
+                  "Explain this to me",
+                  "Give me tips",
+                ]}
+                onPick={onSend}
+              />
             </motion.div>
           ) : null}
 

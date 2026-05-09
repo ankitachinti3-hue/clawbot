@@ -635,6 +635,45 @@
       cursor: not-allowed;
     }
 
+    #chat-lang-bar {
+      padding: 4px 12px 6px 12px;
+      background: rgba(255,255,255,0.03);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+
+    #chat-lang-select {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #ccc;
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      outline: none;
+      width: 100%;
+    }
+
+    #chat-lang-select:hover {
+      background: rgba(255,255,255,0.1);
+    }
+
+    #chat-mic {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.06);
+      border: none;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #chat-mic:hover {
+      background: rgba(255,255,255,0.1);
+    }
+
     @media (max-width:1000px) {
       .arch-grid { grid-template-columns: 1fr }
       .features-grid { grid-template-columns: 1fr }
@@ -751,6 +790,14 @@
           <span class="chat-title">CLAWBOT</span>
           <span class="chat-badge">Civic AI</span>
         </div>
+        <div id="chat-lang-bar">
+          <select id="chat-lang-select">
+            <option value="en-IN">English</option>
+            <option value="kn-IN">ಕನ್ನಡ</option>
+            <option value="mr-IN">मराठी</option>
+            <option value="kok-IN">Konkani</option>
+          </select>
+        </div>
         <button class="chat-close" onclick="closeChatModal()">×</button>
       </div>
       <div class="chat-body">
@@ -785,6 +832,7 @@
           <div class="chat-input-row-wrap">
             <div class="chat-input-row">
               <textarea id="chatInput" class="chat-input" placeholder="Message CLAWBOT..." rows="1"></textarea>
+              <button id="chat-mic" title="Speak">🎤</button>
               <button id="chatSendBtn" class="chat-send" onclick="sendChatMessage()" disabled>➤</button>
             </div>
           </div>
@@ -796,7 +844,119 @@
   <script>
     const cbSessionId = (crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now());
     let isTyping = false;
-    let activeFeature = 'General Civic Assistant';
+    let currentFeature = "General Civic Assistant";
+    let currentLanguage = "en-IN";
+
+    const CEREBRAS_API_KEY = "csk-5r3c8f424typ5wvjwnwph9w6eh99dcwmnr6cp5r8v6edxmdd";
+
+    const FEATURE_PROMPTS = {
+      "General Civic Assistant": `You are CLAWBOT, a general civic AI assistant. 
+    Help users with any municipal or government related questions clearly.`,
+
+      "Trade Licence Assistant": `You are CLAWBOT, a trade licence expert. 
+    Guide users step by step on how to apply, renew, or transfer trade licences 
+    in India. List required documents, fees, and timelines.`,
+
+      "Property Tax Guidance": `You are CLAWBOT, a property tax expert. 
+    Help users understand property tax calculation, deadlines, 
+    how to pay online, and how to dispute assessments.`,
+
+      "Corruption Signal Detector": `You are CLAWBOT, an anti-corruption assistant. 
+    Help users identify corrupt practices, guide them on how to file RTI, 
+    report to Lokayukta, CBI, or ACB. Be specific and empowering.`,
+
+      "Rights Mapper": `You are CLAWBOT, a citizen rights expert. 
+    Explain legal rights of citizens in India — RTI, right to water, 
+    right to housing, consumer rights, etc. Be clear and empowering.`,
+
+      "Grievance Aggregator": `You are CLAWBOT, a grievance filing expert. 
+    Help users file complaints on CPGRAMS, PG Portal, or local 
+    municipal portals. Give step by step guidance.`,
+
+      "Ward Intelligence": `You are CLAWBOT, a ward-level civic expert. 
+    Help users find their ward number, councillor details, 
+    and local civic issues in their area.`,
+
+      "Infrastructure Memory": `You are CLAWBOT, an infrastructure tracking assistant. 
+    Help users track road repairs, drainage issues, streetlights, 
+    and other infrastructure complaints and their status.`,
+
+      "Officer Accountability": `You are CLAWBOT, an officer accountability expert. 
+    Help users find responsible officers for their complaints, 
+    escalation paths, and How to hold officers accountable legally.`,
+
+      "Collective Grievance Aggregator": `You are CLAWBOT, a collective action assistant. 
+    Help groups of citizens file joint complaints and organize 
+    civic action legally and effectively.`,
+
+      "Citizen Life Event Engine": `You are CLAWBOT, a life events guide. 
+    Help users navigate government processes for birth certificates, 
+    death certificates, marriage registration, name change, etc.`,
+
+      "Poverty Trap Detector": `You are CLAWBOT, a welfare schemes expert. 
+    Help users find government schemes they qualify for — 
+    PM Awas, ration card, scholarships, pensions, etc.`,
+
+      "Silence Pattern Detector": `You are CLAWBOT, an RTI and accountability expert. 
+    Help users when government offices are not responding. 
+    Guide them to file RTI, send legal notices, or escalate.`,
+
+      "Community Wisdom Engine": `You are CLAWBOT, a community knowledge assistant. 
+    Share civic tips, best practices, and community solutions 
+    for common local problems.`,
+
+      "Constitutional Rights Mapper": `You are CLAWBOT, a constitutional rights expert. 
+    Explain Fundamental Rights, Directive Principles, and how 
+    citizens can use them to challenge injustice.`,
+
+      "Civic Twin": `You are CLAWBOT, a personal civic assistant. 
+    Act as the user's dedicated civic guide — track their issues, 
+    remind them of deadlines, and proactively help them.`,
+
+      "Reckoning Report": `You are CLAWBOT, a civic report generator. 
+    Help users generate formal complaint letters, RTI applications, 
+    and official reports they can submit to authorities.`
+    };
+
+    function detectFeatureFromQuery(message) {
+      const lower = message.toLowerCase();
+      if (lower.includes("trade licence") || lower.includes("shop licence") || lower.includes("business licence")) 
+        return "Trade Licence Assistant";
+      if (lower.includes("property tax") || lower.includes("house tax")) 
+        return "Property Tax Guidance";
+      if (lower.includes("corrupt") || lower.includes("bribe") || lower.includes("bribery")) 
+        return "Corruption Signal Detector";
+      if (lower.includes("rights") || lower.includes("rti") || lower.includes("legal right")) 
+        return "Rights Mapper";
+      if (lower.includes("complaint") || lower.includes("grievance") || lower.includes("cpgrams")) 
+        return "Grievance Aggregator";
+      if (lower.includes("ward") || lower.includes("councillor")) 
+        return "Ward Intelligence";
+      if (lower.includes("road") || lower.includes("pothole") || lower.includes("drainage") || lower.includes("streetlight")) 
+        return "Infrastructure Memory";
+      if (lower.includes("officer") || lower.includes("accountab")) 
+        return "Officer Accountability";
+      if (lower.includes("birth certificate") || lower.includes("death certificate") || lower.includes("marriage")) 
+        return "Citizen Life Event Engine";
+      if (lower.includes("scheme") || lower.includes("pension") || lower.includes("ration") || lower.includes("welfare")) 
+        return "Poverty Trap Detector";
+      if (lower.includes("constitution") || lower.includes("fundamental right")) 
+        return "Constitutional Rights Mapper";
+      if (lower.includes("report") || lower.includes("letter") || lower.includes("application")) 
+        return "Reckoning Report";
+      if (lower.includes("drivers licence") || lower.includes("driving licence") || lower.includes("parivahan")) 
+        return "Citizen Life Event Engine";
+      return "General Civic Assistant";
+    }
+
+    function updateSidebarHighlight(featureName) {
+      document.querySelectorAll('.chat-feature').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.textContent.includes(featureName)) {
+          btn.classList.add('active');
+        }
+      });
+    }
 
     function openChatModal() {
       document.getElementById('chatModalOverlay').style.display = 'flex';
@@ -829,6 +989,18 @@
       }
     }
 
+    function appendSystemMessage(text) {
+      appendMessage(text, 'bot');
+    }
+
+    function showTypingIndicator() {
+      setTyping(true);
+    }
+
+    function hideTypingIndicator() {
+      setTyping(false);
+    }
+
     function setTyping(show) {
       const box = document.getElementById('chatMessages');
       const id = 'typingIndicator';
@@ -857,14 +1029,14 @@
     function selectFeature(el, featureName) {
       document.querySelectorAll('.chat-feature').forEach((btn) => btn.classList.remove('active'));
       el.classList.add('active');
-      activeFeature = featureName;
+      currentFeature = featureName;
       const input = document.getElementById('chatInput');
       if (input) {
         input.value = `Help me with ${featureName.toLowerCase()}. `;
         input.focus();
         updateSendState();
       }
-      appendMessage(`Switched to ${featureName}. Ask your question and I will focus on this feature.`, 'bot');
+      appendSystemMessage(`Switched to ${featureName}. Ask your question and I will focus on this feature.`);
     }
 
     function updateSendState() {
@@ -874,36 +1046,69 @@
       btn.disabled = !(input.value || '').trim();
     }
 
-    document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') closeChatModal();
-    });
+    async function callCerebras(userMessage, systemPrompt) {
+      const response = await fetch("https://api.cerebras.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${CEREBRAS_API_KEY}` 
+        },
+        body: JSON.stringify({
+          model: "llama3.1-8b",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userMessage }
+          ],
+          max_tokens: 512,
+          temperature: 0.7
+        })
+      });
+      const data = await response.json();
+      return data.choices[0].message.content;
+    }
+
+    async function handleUserMessage(userMessage) {
+      const detectedFeature = detectFeatureFromQuery(userMessage);
+      
+      if (detectedFeature !== currentFeature) {
+        currentFeature = detectedFeature;
+        updateSidebarHighlight(currentFeature);
+        appendSystemMessage(`Switched to ${currentFeature} mode`);
+      }
+
+      const systemPrompt = FEATURE_PROMPTS[currentFeature] || FEATURE_PROMPTS["General Civic Assistant"];
+      
+      showTypingIndicator();
+      try {
+        const answer = await callCerebras(userMessage, systemPrompt);
+        hideTypingIndicator();
+        appendMessage(answer, 'bot');
+      } catch (e) {
+        hideTypingIndicator();
+        appendMessage('Sorry, couldn\'t get a response. Please try again.', 'bot', true);
+      }
+    }
 
     async function sendChatMessage() {
       if (isTyping) return;
       const input = document.getElementById('chatInput');
       const msg = (input.value || '').trim();
       if (!msg) return;
+      
       appendMessage(msg, 'user');
       input.value = '';
       isTyping = true;
-      setTyping(true);
-      try {
-        const res = await fetch('http://localhost:8000/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: `[Feature: ${activeFeature}] ${msg}`, language: 'en', session_id: cbSessionId })
-        });
-        const data = await res.json();
-        setTyping(false);
-        appendMessage((data && data.answer) ? data.answer : 'No response received.', 'bot');
-      } catch (e) {
-        setTyping(false);
-        appendMessage('Unable to connect to CLAWBOT backend.', 'bot', true);
-      } finally {
-        isTyping = false;
-        updateSendState();
-      }
+      updateSendState();
+      
+      await handleUserMessage(msg);
+      
+      isTyping = false;
+      updateSendState();
     }
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeChatModal();
+    });
 
     document.getElementById('chatInput').addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -917,6 +1122,102 @@
       this.style.height = `${Math.min(this.scrollHeight, 160)}px`;
       updateSendState();
     });
+
+    // Language switcher functionality
+    const langSelect = document.getElementById('chat-lang-select');
+    const micBtn = document.getElementById('chat-mic');
+
+    langSelect.addEventListener('change', (e) => {
+      currentLanguage = e.target.value;
+      // Update placeholder based on language
+      const placeholders = {
+        'en-IN': 'Message CLAWBOT…',
+        'kn-IN': 'CLAWBOTಗೆ ಸಂದೇಶಿಸಿ…',
+        'mr-IN': 'CLAWBOTला संदेश द्या…',
+        'kok-IN': 'CLAWBOTक संदेश द्या…'
+      };
+      document.getElementById('chatInput').placeholder = placeholders[currentLanguage] || placeholders['en-IN'];
+    });
+
+    // Voice recognition setup
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+    let isListening = false;
+
+    if (SpeechRecognition) {
+      recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = currentLanguage;
+
+      micBtn.addEventListener('click', () => {
+        if (isListening) {
+          recognition.stop();
+          return;
+        }
+        
+        isListening = true;
+        micBtn.textContent = '🔴';
+        micBtn.title = 'Stop recording';
+        try {
+          recognition.start();
+        } catch (e) {
+          console.error('Speech start error:', e);
+          isListening = false;
+          micBtn.textContent = '🎤';
+          micBtn.title = 'Speak';
+        }
+      });
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        console.log('Heard:', transcript);
+        const input = document.getElementById('chatInput');
+        input.value += transcript;
+        updateSendState();
+        input.focus();
+      };
+
+      recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        isListening = false;
+        micBtn.textContent = '🎤';
+        micBtn.title = 'Speak';
+        
+        if (event.error === 'not-allowed') {
+          appendMessage('Microphone access denied. Please allow mic permission in Chrome settings.', 'bot');
+        } else if (event.error === 'no-speech') {
+          appendMessage('No speech detected. Please try again.', 'bot');
+        }
+      };
+
+      recognition.onend = async () => {
+        isListening = false;
+        micBtn.textContent = '🎤';
+        micBtn.title = 'Speak';
+        
+        // Auto-send if there's content
+        const input = document.getElementById('chatInput');
+        const msg = input.value.trim();
+        if (msg) {
+          input.value = '';
+          appendMessage(msg, 'user');
+          
+          // Direct call to Cerebras for voice input
+          showTypingIndicator();
+          try {
+            const answer = await callCerebras(msg, LANGUAGES[currentLang].systemPrompt);
+            hideTypingIndicator();
+            appendMessage(answer, 'bot');
+          } catch (e) {
+            hideTypingIndicator();
+            appendMessage('Sorry, couldn\'t get a response. Please try again.', 'bot', true);
+          }
+        }
+      };
+    } else {
+      micBtn.style.display = 'none';
+    }
 
     document.querySelectorAll('a[href^="#"]').forEach((a) => {
       a.addEventListener('click', function (e) {

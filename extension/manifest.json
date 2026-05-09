@@ -3,17 +3,29 @@
   "name": "CLAWBOT — Civic Intelligence",
   "version": "1.0.0",
   "description": "Civic assistant for Belagavi City Corporation. Calls CLAWBOT API on localhost or production.",
-  "permissions": ["storage"],
+  "permissions": [
+    "activeTab",
+    "storage",
+    "tabs",
+    "scripting"
+  ],
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "js": ["config.js", "content.js"],
       "css": ["content.css"],
       "run_at": "document_idle"
     }
   ],
-  "host_permissions": ["http://localhost:8000/*", "http://127.0.0.1:8000/*"]
+  "host_permissions": [
+    "https://api.cerebras.ai/*",
+    "https://r.jina.ai/*",
+    "<all_urls>"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
 }
